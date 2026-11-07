@@ -1,9 +1,8 @@
-
 # Customer Churn Prediction System
 
 An end-to-end Machine Learning project that predicts whether a telecom customer is likely to leave a company.
 
-The project combines machine learning, model explainability, REST API development, input validation, and automated testing.
+This project combines machine learning, model explainability, REST API development, input validation, automated testing, and Docker containerization.
 
 ## Project Objectives
 
@@ -12,27 +11,40 @@ The project combines machine learning, model explainability, REST API developmen
 - Categorize customers into Low, Medium, and High risk levels.
 - Provide individual and batch predictions through a REST API.
 - Validate customer input before generating predictions.
+- Containerize the application using Docker.
+
+## Dataset
+
+**IBM Telco Customer Churn Dataset (Kaggle)**
+
+The dataset contains customer information, including:
+- Demographics
+- Account information
+- Services subscribed
+- Contract details
+- Monthly and total charges
+- Customer churn status
 
 ## Machine Learning
-
-**Dataset:** IBM Telco Customer Churn Dataset (Kaggle)
 
 **Models explored:**
 - Logistic Regression
 - Random Forest
 - XGBoost
 
-**Model development:**
-- Exploratory Data Analysis
+**Model development process:**
+- Exploratory Data Analysis (EDA)
 - Data preprocessing
 - Feature engineering
-- Train, validation, and test split
+- Stratified train, validation, and test split
 - Cross-validation
 - Hyperparameter tuning
 - Model evaluation
-- SHAP-based explainability
+- SHAP-based model explainability
 
-**Selected model:** Add your actual final selected model here.
+**Final selected model:** To be specified after confirming the final model-selection results.
+
+The trained model is saved as `artifacts/churn_model.pkl`.
 
 ## Technologies Used
 
@@ -46,6 +58,7 @@ The project combines machine learning, model explainability, REST API developmen
 - Pydantic
 - Uvicorn
 - Pytest
+- Docker
 - Git and GitHub
 
 ## API Features
@@ -58,17 +71,29 @@ The project combines machine learning, model explainability, REST API developmen
 | `/predict/batch` | POST | Batch customer predictions |
 | `/docs` | GET | Interactive API documentation |
 
-## Prediction Output
+## Example Prediction
 
-Example:
+**Sample API response:**
 
 ```json
 {
   "prediction": "No Churn",
-  "churn_probability": 0.2797,
-  "risk_level": "Low"
+  "churn_probability": 0.4765,
+  "risk_level": "Medium"
 }
 ```
+
+The probability represents the model's estimated likelihood of churn. The prediction and risk category are separate outputs.
+
+## Risk Classification
+
+The API uses the following probability thresholds:
+
+- Low: probability below 0.40
+- Medium: probability from 0.40 to below 0.70
+- High: probability of 0.70 or above
+
+These are illustrative project thresholds and are not calibrated business risk categories.
 
 ## Project Structure
 
@@ -87,8 +112,10 @@ customer-churn-prediction/
 ├── tests/
 │   └── test_api.py
 │
-├── requirements.txt
+├── Dockerfile
+├── .dockerignore
 ├── .gitignore
+├── requirements.txt
 └── README.md
 ```
 
@@ -97,7 +124,8 @@ customer-churn-prediction/
 ### 1. Clone the repository
 
 ```bash
-git clone YOUR_GITHUB_REPOSITORY_URL
+git clone https://github.com/chhavibakhru1-spec/customer-churn-prediction.git
+
 cd customer-churn-prediction
 ```
 
@@ -105,8 +133,11 @@ cd customer-churn-prediction
 
 ```bash
 python3 -m venv venv
+
 source venv/bin/activate
 ```
+
+Python 3.12 or later is recommended.
 
 ### 3. Install dependencies
 
@@ -128,32 +159,72 @@ http://127.0.0.1:8000/docs
 
 ## Running Automated Tests
 
+Run:
+
 ```bash
 python3 -m pytest tests/ -v
 ```
 
-**Current test result:** 6 tests passed.
+**Test results:** 6 tests passed.
 
-## Risk Classification
+Tests cover:
+- Home endpoint
+- Health endpoint
+- Single prediction
+- Batch prediction
+- Invalid customer input
+- Missing features
 
-The API currently uses these probability thresholds:
+## Docker Deployment
 
-- Low: probability below 0.40
-- Medium: probability from 0.40 to below 0.70
-- High: probability of 0.70 or above
+The application is containerized using Docker.
 
-These are illustrative project thresholds, not calibrated business risk categories.
+### 1. Build the Docker image
+
+```bash
+docker build -t customer-churn-api .
+```
+
+### 2. Run the Docker container
+
+```bash
+docker run -d --name customer-churn-container -p 8000:8000 customer-churn-api
+```
+
+### 3. Verify the container
+
+```bash
+docker ps
+```
+
+### 4. Test the API
+
+Health check:
+
+http://127.0.0.1:8000/health
+
+Swagger documentation:
+
+http://127.0.0.1:8000/docs
+
+### 5. Stop the container
+
+```bash
+docker stop customer-churn-container
+```
 
 ## Future Improvements
 
 - Deploy the API to a cloud platform.
 - Build an interactive Streamlit dashboard.
 - Add monitoring and logging.
-- Improve API error handling.
 - Add model performance monitoring.
+- Improve model explainability through API responses.
 
 ## Author
 
-Chhavi Bakhru
+**Chhavi Bakhru**
 
 Aspiring AI/ML Engineer
+
+GitHub: https://github.com/chhavibakhru1-spec
