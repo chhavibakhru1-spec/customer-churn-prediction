@@ -1,17 +1,20 @@
-import streamlit as st
-import requests
-import pandas as pd
-import json
 
-# -------------------------------
+import streamlit as st
+import pandas as pd
+import joblib
+from pathlib import Path
+
+# --------------------------------
 # Configuration
-# -------------------------------
+# --------------------------------
 
 st.set_page_config(
     page_title="Customer Churn Prediction",
     page_icon="📊",
     layout="wide"
 )
+
+BASE_DIR = Path(__file__).resolve().parent
 
 FEATURE_COLUMNS = [
     "customerID", "gender", "SeniorCitizen", "Partner",
@@ -22,101 +25,87 @@ FEATURE_COLUMNS = [
     "PaymentMethod", "MonthlyCharges", "TotalCharges"
 ]
 
-# -------------------------------
-# Dashboard styling
-# -------------------------------
+# --------------------------------
+# Load trained model
+# --------------------------------
 
-st.title("📊 Customer Churn Prediction Dashboard")
+@st.cache_resource
+def load_model():
+    model = joblib.load(BASE_DIR / "artifacts/churn_model.pkl")
+    features = joblib.load(BASE_DIR / "artifacts/feature_names.pkl")
+    return model, features
 
-st.markdown(
-    "Predict customer churn using our trained "
+try:
+    model, feature_names = load_model()
+    st.sidebar.success("ML Model Loaded Successfully")
+except Exception as e:
+    st.error(f"Could not load model artifacts: {e}")
+    st.stop()
+
+# --------------------------------
+# Prediction function
+# --------------------------------
+
+classes = list(model.classes_)
+
+positive_class = next(
+    (label for label in [1, "Yes", "yes", "Churn", True]
+     if label in classes),
+    classes[-1]
+)
+
+positive_index = classes.index(positive_class)
+
+
+def predict_customers(data):
+
+    X = pd.DataFrame(data, columns=feature_names)
+
+    predictions = model.predict(X)
+    probabilities = model.predict_proba(X)[:, positive_index]
+
+    results = []
+
+    for prediction, probability in zip(predictions, probabilities):
+
+        is_churn = prediction == positive_class
+
+        risk = (
+            "High" if probability >= 0.70
+            else "Medium" if probability >= 0.40
+            else "Low"
+        )
+
+        results.append({
+            "prediction": "Churn" if is_churn else "No Churn",
+            "churn_probability": round(float(probability), 4),
+            "risk_level": risk
+        })
+
+    return pd.DataFrame(results)
+
+
+# --------------------------------
+# Dashboard
+# --------------------------------
+
+st.title("Customer Churn Prediction Dashboard")
+
+st.write(
+    "Predict customer churn using a trained "
     "Machine Learning model."
 )
 
 st.divider()
 
-# -------------------------------
-# API connection
-# -------------------------------
+single_tab, batch_tab = st.tabs([
+    "Single Customer Prediction",
+    "Batch Prediction"
+])
 
-st.sidebar.header("API Configuration")
-
-api_url = st.sidebar.text_input(
-    "FastAPI URL",
-    value="http://127.0.0.1:8000"
-).rstrip("/")
-
-try:
-    health = requests.get(
-        f"{api_url}/health",
-        timeout=5
-    )
-
-    if health.status_code == 200:
-        st.sidebar.success("API Connected")
-    else:
-        st.sidebar.error("API is not healthy")
-
-except requests.RequestException:
-    st.sidebar.error("API is not reachable")
-
-st.sidebar.info(
-    "Start your FastAPI Docker container "
-    "before making predictions."
-)
-
-# -------------------------------
-# Prediction display function
-# -------------------------------
-
-def display_prediction(result):
-
-    prediction = result["prediction"]
-    probability = result["churn_probability"]
-    risk = result["risk_level"]
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.metric("Prediction", prediction)
-
-    with col2:
-        st.metric(
-            "Churn Probability",
-            f"{probability * 100:.2f}%"
-        )
-
-    with col3:
-        st.metric("Risk Level", risk)
-
-    st.progress(float(probability))
-
-    if risk == "High":
-        st.error("High churn risk")
-
-    elif risk == "Medium":
-        st.warning("Medium churn risk")
-
-    else:
-        st.success("Low churn risk")
-
-    st.caption(
-        "Risk categories use the thresholds configured "
-        "in the FastAPI application."
-    )
-
-
-# -------------------------------
-# Dashboard tabs
-# -------------------------------
-
-single_tab, batch_tab = st.tabs(
-    ["👤 Single Customer Prediction", "📁 Batch Prediction"]
-)
-
-# =====================================================
-# SINGLE CUSTOMER PREDICTION
-# =====================================================
+# =================================
+# SINGLE CUSTOMER
+# =================================
 
 with single_tab:
 
@@ -131,36 +120,27 @@ with single_tab:
             st.markdown("### Personal Information")
 
             customer_id = st.text_input(
-                "Customer ID",
-                value="DASH001"
+                "Customer ID", "DASH001"
             )
 
             gender = st.selectbox(
-                "Gender",
-                ["Female", "Male"]
+                "Gender", ["Female", "Male"]
             )
 
             senior_citizen = st.selectbox(
-                "Senior Citizen",
-                [0, 1],
-                format_func=lambda x: "Yes" if x == 1 else "No"
+                "Senior Citizen", [0, 1]
             )
 
             partner = st.selectbox(
-                "Partner",
-                ["Yes", "No"]
+                "Partner", ["Yes", "No"]
             )
 
             dependents = st.selectbox(
-                "Dependents",
-                ["Yes", "No"]
+                "Dependents", ["Yes", "No"]
             )
 
             tenure = st.number_input(
-                "Tenure (months)",
-                min_value=0,
-                max_value=72,
-                value=12
+                "Tenure (months)", 0, 72, 12
             )
 
         with col2:
@@ -168,8 +148,7 @@ with single_tab:
             st.markdown("### Services")
 
             phone_service = st.selectbox(
-                "Phone Service",
-                ["Yes", "No"]
+                "Phone Service", ["Yes", "No"]
             )
 
             multiple_lines = st.selectbox(
@@ -224,8 +203,7 @@ with single_tab:
             )
 
             paperless_billing = st.selectbox(
-                "Paperless Billing",
-                ["Yes", "No"]
+                "Paperless Billing", ["Yes", "No"]
             )
 
             payment_method = st.selectbox(
@@ -243,7 +221,6 @@ with single_tab:
             monthly_charges = st.number_input(
                 "Monthly Charges",
                 min_value=0.0,
-                max_value=200.0,
                 value=70.35
             )
 
@@ -261,11 +238,11 @@ with single_tab:
     if submitted:
 
         if not customer_id.strip():
-            st.error("Please enter a Customer ID.")
+            st.error("Enter a Customer ID.")
 
         else:
 
-            customer_data = {
+            customer = {
                 "customerID": customer_id.strip(),
                 "gender": gender,
                 "SeniorCitizen": int(senior_citizen),
@@ -289,244 +266,159 @@ with single_tab:
             }
 
             try:
-
-                with st.spinner("Predicting customer churn..."):
-
-                    response = requests.post(
-                        f"{api_url}/predict",
-                        json={"data": customer_data},
-                        timeout=30
-                    )
-
-                response.raise_for_status()
-
-                result = response.json()
+                result = predict_customers(
+                    [customer]
+                ).iloc[0]
 
                 st.divider()
                 st.subheader("Prediction Results")
 
-                display_prediction(result)
+                c1, c2, c3 = st.columns(3)
 
-            except requests.RequestException as e:
-                st.error(f"Prediction request failed: {e}")
+                c1.metric("Prediction", result["prediction"])
 
-# =====================================================
+                c2.metric(
+                    "Churn Probability",
+                    f'{result["churn_probability"] * 100:.2f}%'
+                )
+
+                c3.metric("Risk Level", result["risk_level"])
+
+                st.progress(result["churn_probability"])
+
+                if result["risk_level"] == "High":
+                    st.error("High churn risk")
+                elif result["risk_level"] == "Medium":
+                    st.warning("Medium churn risk")
+                else:
+                    st.success("Low churn risk")
+
+            except Exception as e:
+                st.error(f"Prediction failed: {e}")
+
+
+# =================================
 # BATCH PREDICTION
-# =====================================================
+# =================================
 
 with batch_tab:
 
-    st.subheader("Upload Customer CSV File")
-
-    st.write(
-        "Upload a CSV containing customer records. "
-        "The dashboard will predict churn for each customer."
-    )
+    st.subheader("Upload Customer CSV")
 
     uploaded_file = st.file_uploader(
-        "Choose CSV file",
+        "Choose a CSV file",
         type=["csv"]
     )
 
-    if uploaded_file is not None:
+    if uploaded_file:
 
         try:
 
             df = pd.read_csv(uploaded_file)
 
-            st.write("Preview of uploaded data")
+            st.write("Data Preview")
             st.dataframe(df.head(), use_container_width=True)
 
-            missing_columns = [
-                col for col in FEATURE_COLUMNS
+            missing = [
+                col for col in feature_names
                 if col not in df.columns
             ]
 
-            if missing_columns:
-
-                st.error(
-                    f"Missing required columns: {missing_columns}"
-                )
+            if missing:
+                st.error(f"Missing columns: {missing}")
 
             elif len(df) == 0:
+                st.error("CSV is empty.")
 
-                st.error("The uploaded CSV is empty.")
+            elif len(df) > 1000:
+                st.error("Please upload at most 1000 customers at a time.")
 
             else:
 
-                st.info(
-                    f"Total customers uploaded: {len(df)}"
-                )
+                if st.button("Run Batch Predictions"):
 
-                if st.button(
-                    "Run Batch Predictions",
-                    use_container_width=True
-                ):
+                    numeric_columns = [
+                        "SeniorCitizen", "tenure",
+                        "MonthlyCharges", "TotalCharges"
+                    ]
 
-                    try:
+                    input_df = df[feature_names].copy()
 
-                        batch_df = df.copy()
+                    for col in numeric_columns:
+                        input_df[col] = pd.to_numeric(
+                            input_df[col], errors="coerce"
+                        )
 
-                        numeric_columns = [
-                            "SeniorCitizen",
-                            "tenure",
-                            "MonthlyCharges",
-                            "TotalCharges"
-                        ]
+                    if input_df[numeric_columns].isnull().any().any():
+                        st.error("Some numeric values are missing or invalid.")
 
-                        for col in numeric_columns:
-                            batch_df[col] = pd.to_numeric(
-                                batch_df[col],
-                                errors="coerce"
-                            )
+                    elif not input_df["SeniorCitizen"].isin([0, 1]).all():
+                        st.error("SeniorCitizen must contain only 0 or 1.")
 
-                        if batch_df[numeric_columns].isnull().any().any():
-                            st.error(
-                                "Some numeric values are missing or invalid. "
-                                "Please correct the CSV."
-                            )
+                    else:
 
-                        elif not batch_df["SeniorCitizen"].isin([0, 1]).all():
-                            st.error(
-                                "SeniorCitizen must contain only 0 or 1."
-                            )
+                        try:
 
-                        else:
-
-                            batch_df["SeniorCitizen"] = (
-                                batch_df["SeniorCitizen"].astype(int)
-                            )
-
-                            batch_df["tenure"] = (
-                                batch_df["tenure"].astype(int)
-                            )
-
-                            records = json.loads(
-                                batch_df[FEATURE_COLUMNS].to_json(
-                                    orient="records"
+                            with st.spinner("Predicting customers..."):
+                                predictions = predict_customers(
+                                    input_df.to_dict(orient="records")
                                 )
-                            )
-
-                            all_predictions = []
-
-                            progress = st.progress(0)
-
-                            total_batches = (
-                                len(records) + 99
-                            ) // 100
-
-                            for i in range(0, len(records), 100):
-
-                                customer_batch = records[i:i + 100]
-
-                                response = requests.post(
-                                    f"{api_url}/predict/batch",
-                                    json={
-                                        "customers": customer_batch
-                                    },
-                                    timeout=120
-                                )
-
-                                response.raise_for_status()
-
-                                result = response.json()
-
-                                all_predictions.extend(
-                                    result["predictions"]
-                                )
-
-                                progress.progress(
-                                    min(
-                                        (i // 100 + 1) / total_batches,
-                                        1.0
-                                    )
-                                )
-
-                            result_df = pd.DataFrame(
-                                all_predictions
-                            )
 
                             final_df = pd.concat(
                                 [
                                     df.reset_index(drop=True),
-                                    result_df.reset_index(drop=True)
+                                    predictions.reset_index(drop=True)
                                 ],
                                 axis=1
                             )
 
-                            st.success(
-                                "Batch predictions completed successfully!"
+                            st.success("Predictions completed!")
+
+                            c1, c2, c3 = st.columns(3)
+
+                            c1.metric("Total Customers", len(final_df))
+
+                            c2.metric(
+                                "Predicted Churn",
+                                int((final_df["prediction"] == "Churn").sum())
                             )
 
-                            st.subheader("Prediction Summary")
-
-                            col1, col2, col3 = st.columns(3)
-
-                            with col1:
-                                st.metric(
-                                    "Total Customers",
-                                    len(final_df)
-                                )
-
-                            with col2:
-                                churn_count = (
-                                    final_df["prediction"] == "Churn"
-                                ).sum()
-
-                                st.metric(
-                                    "Predicted Churn",
-                                    int(churn_count)
-                                )
-
-                            with col3:
-                                no_churn_count = (
-                                    final_df["prediction"] == "No Churn"
-                                ).sum()
-
-                                st.metric(
-                                    "Predicted No Churn",
-                                    int(no_churn_count)
-                                )
+                            c3.metric(
+                                "Predicted No Churn",
+                                int((final_df["prediction"] == "No Churn").sum())
+                            )
 
                             st.subheader("Risk Distribution")
 
-                            risk_counts = (
+                            st.bar_chart(
                                 final_df["risk_level"].value_counts()
                             )
 
-                            st.bar_chart(risk_counts)
-
-                            st.subheader("Customer Predictions")
+                            st.subheader("Prediction Results")
 
                             st.dataframe(
                                 final_df,
                                 use_container_width=True
                             )
 
-                            csv = final_df.to_csv(
-                                index=False
-                            ).encode("utf-8")
-
                             st.download_button(
-                                "Download Prediction Results",
-                                data=csv,
-                                file_name="churn_predictions.csv",
-                                mime="text/csv"
+                                "Download Results CSV",
+                                final_df.to_csv(index=False).encode("utf-8"),
+                                "churn_predictions.csv",
+                                "text/csv"
                             )
 
-                    except requests.RequestException as e:
-                        st.error(f"Batch API request failed: {e}")
-
-                    except (KeyError, ValueError) as e:
-                        st.error(f"Could not process predictions: {e}")
+                        except Exception as e:
+                            st.error(f"Batch prediction failed: {e}")
 
         except Exception as e:
-            st.error(f"Could not read CSV file: {e}")
+            st.error(f"Could not read CSV: {e}")
 
 
 st.divider()
 
 st.caption(
-    "Customer Churn Prediction System | "
-    "Machine Learning + FastAPI + Streamlit + Docker"
+    "Customer Churn Prediction | "
+    "Machine Learning | Streamlit | FastAPI | Docker"
 )
+
